@@ -228,6 +228,22 @@ It provides a foundation for exploring more informed electricity usage and inves
 
 ---
 
+---
+
+## 16. Dashboard Screenshots
+
+### Overview
+![SmartPowerTracker Overview](docs/screenshots/overview.png)
+
+### Consumption Analysis
+![Consumption Analysis](docs/screenshots/consumption_analysis.png)
+
+### Anomaly Detection
+![Anomaly Detection](docs/screenshots/anomaly_detection.png)
+
+### Dataset
+![Dataset](docs/screenshots/dataset.png)
+
 **Project Name:** SmartPowerTracker  
 **Project Title:** Smart Home Energy Watch  
 **Category:** Data Analytics and Machine Learning
