@@ -2,12 +2,33 @@
 from pathlib import Path
 
 import pandas as pd
+import matplotlib.pyplot as plt
 import streamlit as st
 
 
-# -----------------------------------------
+# ----------------------------------------
+# PROJECT FILE LOCATIONS
+# ----------------------------------------
+
+PROJECT_DIR = Path(__file__).resolve().parents[1]
+
+DATA_FILE = (
+    PROJECT_DIR
+    / "data"
+    / "processed"
+    / "household_power_cleaned.csv"
+)
+
+ANOMALY_FILE = (
+    PROJECT_DIR
+    / "reports"
+    / "anomaly_results.csv"
+)
+
+
+# ----------------------------------------
 # PAGE CONFIGURATION
-# -----------------------------------------
+# ----------------------------------------
 
 st.set_page_config(
     page_title="SmartPowerTracker",
@@ -15,27 +36,50 @@ st.set_page_config(
     layout="wide"
 )
 
-# Project file paths
-CLEAN_FILE = Path(
-    "data/processed/household_power_cleaned.csv"
-)
 
-ANOMALY_FILE = Path(
-    "reports/anomaly_results.csv"
-)
+# ----------------------------------------
+# CUSTOM DESIGN
+# ----------------------------------------
+
+st.markdown("""
+<style>
+    .main {
+        background-color: #F5F8F5;
+    }
+
+    h1 {
+        color: #174D38;
+    }
+
+    h2, h3 {
+        color: #246B4B;
+    }
+
+    div[data-testid="stMetric"] {
+        background-color: white;
+        padding: 18px;
+        border-radius: 12px;
+        border: 1px solid #DCE8DF;
+    }
+
+    .stAlert {
+        border-radius: 10px;
+    }
+</style>
+""", unsafe_allow_html=True)
 
 
-# -----------------------------------------
+# ----------------------------------------
 # LOAD DATA
-# -----------------------------------------
+# ----------------------------------------
 
 @st.cache_data
 def load_data():
 
     if ANOMALY_FILE.exists():
         df = pd.read_csv(ANOMALY_FILE)
-    elif CLEAN_FILE.exists():
-        df = pd.read_csv(CLEAN_FILE)
+    elif DATA_FILE.exists():
+        df = pd.read_csv(DATA_FILE)
     else:
         return None
 
@@ -62,211 +106,318 @@ def load_data():
         ]
     )
 
-    return df.sort_values("timestamp")
+    df = df.sort_values("timestamp").reset_index(drop=True)
 
+    # Combine both anomaly detection methods
+    if (
+        "statistical_anomaly" in df.columns
+        and "isolation_forest_anomaly" in df.columns
+    ):
 
-# -----------------------------------------
-# DASHBOARD HEADER
-# -----------------------------------------
+        for column in [
+            "statistical_anomaly",
+            "isolation_forest_anomaly"
+        ]:
 
-st.title("⚡ SmartPowerTracker")
+            df[column] = (
+                df[column]
+                .astype(str)
+                .str.lower()
+                .isin(["true", "1"])
+            )
 
-st.subheader(
-    "Smart Household Electricity Monitoring Dashboard"
-)
+        df["any_anomaly"] = (
+            df["statistical_anomaly"]
+            | df["isolation_forest_anomaly"]
+        )
 
-st.markdown(
-    "Monitor electricity consumption, "
-    "understand usage patterns and identify "
-    "unusual power readings."
-)
+    elif "statistical_anomaly" in df.columns:
 
-st.divider()
+        df["any_anomaly"] = (
+            df["statistical_anomaly"]
+            .astype(str)
+            .str.lower()
+            .isin(["true", "1"])
+        )
 
+    else:
 
-# -----------------------------------------
-# LOAD PROJECT DATA
-# -----------------------------------------
+        df["any_anomaly"] = False
+
+    return df
+
 
 df = load_data()
+
+
+# ----------------------------------------
+# SIDEBAR
+# ----------------------------------------
+
+st.sidebar.title("⚡ SmartPowerTracker")
+
+st.sidebar.write(
+    "Household Electricity Monitoring System"
+)
+
+st.sidebar.divider()
+
+st.sidebar.subheader("Dashboard Navigation")
+
+page = st.sidebar.radio(
+    "Select section",
+    [
+        "Overview",
+        "Consumption Analysis",
+        "Anomaly Detection",
+        "Dataset"
+    ]
+)
+
+st.sidebar.divider()
+
+st.sidebar.caption(
+    "Project: SmartPowerTracker"
+)
+
+st.sidebar.caption(
+    "Built using Python and Streamlit"
+)
+
+
+# ----------------------------------------
+# CHECK DATA
+# ----------------------------------------
 
 if df is None or df.empty:
 
     st.error(
-        "Dataset not found. Please run the "
-        "data loading, cleaning and anomaly "
-        "detection programs first."
+        "Dataset not found or contains no valid readings. "
+        "Run the data cleaning and anomaly detection programs first."
     )
 
     st.stop()
 
 
-# -----------------------------------------
-# SIDEBAR FILTERS
-# -----------------------------------------
+# ----------------------------------------
+# DASHBOARD HEADER
+# ----------------------------------------
 
-st.sidebar.header("Dashboard Filters")
+st.title("⚡ SmartPowerTracker")
 
-min_date = df["timestamp"].min().date()
-max_date = df["timestamp"].max().date()
-
-selected_dates = st.sidebar.date_input(
-    "Select date range",
-    value=(min_date, max_date),
-    min_value=min_date,
-    max_value=max_date
+st.write(
+    "Smart Household Electricity Monitoring "
+    "and Anomaly Detection Dashboard"
 )
 
-if isinstance(selected_dates, (tuple, list)):
+st.caption(
+    "Dataset: Individual Household Electric Power Consumption "
+    "| UCI Machine Learning Repository"
+)
 
-    if len(selected_dates) == 2:
+st.divider()
 
-        start_date, end_date = selected_dates
 
-        filtered_df = df[
-            (df["timestamp"].dt.date >= start_date)
-            &
-            (df["timestamp"].dt.date <= end_date)
-        ]
+# ----------------------------------------
+# OVERVIEW PAGE
+# ----------------------------------------
 
-    else:
-        filtered_df = df[
-            df["timestamp"].dt.date == selected_dates[0]
-        ]
+if page == "Overview":
 
-else:
+    st.header("Electricity Usage Overview")
 
-    filtered_df = df[
-        df["timestamp"].dt.date == selected_dates
+    total_readings = len(df)
+
+    average_power = df[
+        "Global_active_power"
+    ].mean()
+
+    maximum_power = df[
+        "Global_active_power"
+    ].max()
+
+    average_voltage = df["Voltage"].mean()
+
+    anomaly_count = int(
+        df["any_anomaly"].sum()
+    )
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    col1.metric(
+        "Total Readings",
+        total_readings
+    )
+
+    col2.metric(
+        "Average Power",
+        f"{average_power:.2f} kW"
+    )
+
+    col3.metric(
+        "Peak Power",
+        f"{maximum_power:.2f} kW"
+    )
+
+    col4.metric(
+        "Unusual Readings",
+        anomaly_count
+    )
+
+    st.subheader("Electricity Consumption Trend")
+
+    chart_data = df.set_index("timestamp")[
+        ["Global_active_power"]
     ]
 
-
-if filtered_df.empty:
-
-    st.warning("No readings found for this date range.")
-    st.stop()
-
-
-# -----------------------------------------
-# KEY PERFORMANCE INDICATORS
-# -----------------------------------------
-
-average_power = filtered_df[
-    "Global_active_power"
-].mean()
-
-maximum_power = filtered_df[
-    "Global_active_power"
-].max()
-
-minimum_power = filtered_df[
-    "Global_active_power"
-].min()
-
-average_voltage = filtered_df[
-    "Voltage"
-].mean()
-
-total_readings = len(filtered_df)
-
-
-col1, col2, col3, col4 = st.columns(4)
-
-col1.metric(
-    "Average Power",
-    f"{average_power:.2f} kW"
-)
-
-col2.metric(
-    "Peak Power",
-    f"{maximum_power:.2f} kW"
-)
-
-col3.metric(
-    "Average Voltage",
-    f"{average_voltage:.2f} V"
-)
-
-col4.metric(
-    "Total Readings",
-    total_readings
-)
-
-
-st.divider()
-
-
-# -----------------------------------------
-# ELECTRICITY CONSUMPTION CHART
-# -----------------------------------------
-
-st.subheader("Electricity Consumption Over Time")
-
-chart_data = filtered_df.set_index("timestamp")[
-    ["Global_active_power"]
-]
-
-st.line_chart(
-    chart_data,
-    y="Global_active_power",
-    x_label="Time",
-    y_label="Active Power (kW)"
-)
-
-
-# -----------------------------------------
-# POWER DISTRIBUTION
-# -----------------------------------------
-
-st.subheader("Power Consumption Distribution")
-
-histogram = pd.cut(
-    filtered_df["Global_active_power"],
-    bins=10
-).value_counts().sort_index()
-
-histogram_data = pd.DataFrame({
-    "Power Range": histogram.index.astype(str),
-    "Readings": histogram.values
-}).set_index("Power Range")
-
-st.bar_chart(histogram_data)
-
-
-# -----------------------------------------
-# ANOMALY DETECTION
-# -----------------------------------------
-
-st.divider()
-
-st.subheader("Unusual Consumption Detection")
-
-if "statistical_anomaly" in filtered_df.columns:
-
-    statistical_count = int(
-        filtered_df["statistical_anomaly"]
-        .astype(bool)
-        .sum()
+    st.line_chart(
+        chart_data,
+        height=350
     )
 
+    st.subheader("Voltage Overview")
+
     st.metric(
-        "Statistical Unusual Readings",
+        "Average Voltage",
+        f"{average_voltage:.2f} V"
+    )
+
+    st.caption(
+        "All metrics describe the selected dataset sample, "
+        "not long-term household consumption."
+    )
+
+
+# ----------------------------------------
+# CONSUMPTION ANALYSIS PAGE
+# ----------------------------------------
+
+elif page == "Consumption Analysis":
+
+    st.header("Consumption Analysis")
+
+    st.subheader("Power Distribution")
+
+    fig, ax = plt.subplots(figsize=(10, 4))
+
+    ax.hist(
+        df["Global_active_power"],
+        bins=20,
+        edgecolor="black"
+    )
+
+    ax.set_xlabel("Active Power (kW)")
+    ax.set_ylabel("Number of Readings")
+    ax.set_title("Distribution of Electricity Consumption")
+
+    st.pyplot(fig)
+    plt.close(fig)
+
+    st.subheader("Power Statistics")
+
+    statistics = df[
+        "Global_active_power"
+    ].describe().to_frame(
+        name="Active Power (kW)"
+    )
+
+    st.dataframe(
+        statistics,
+        use_container_width=True
+    )
+
+    st.subheader("Voltage Statistics")
+
+    st.write(
+        f"Minimum Voltage: {df['Voltage'].min():.2f} V"
+    )
+
+    st.write(
+        f"Maximum Voltage: {df['Voltage'].max():.2f} V"
+    )
+
+    st.write(
+        f"Average Voltage: {df['Voltage'].mean():.2f} V"
+    )
+
+
+# ----------------------------------------
+# ANOMALY DETECTION PAGE
+# ----------------------------------------
+
+elif page == "Anomaly Detection":
+
+    st.header("Unusual Electricity Readings")
+
+    statistical_count = 0
+    isolation_count = 0
+
+    if "statistical_anomaly" in df.columns:
+
+        statistical_count = int(
+            df["statistical_anomaly"].sum()
+        )
+
+    if "isolation_forest_anomaly" in df.columns:
+
+        isolation_count = int(
+            df["isolation_forest_anomaly"].sum()
+        )
+
+    col1, col2, col3 = st.columns(3)
+
+    col1.metric(
+        "Total Unusual Readings",
+        int(df["any_anomaly"].sum())
+    )
+
+    col2.metric(
+        "Statistical Method",
         statistical_count
     )
 
-    unusual_df = filtered_df[
-        filtered_df["statistical_anomaly"].astype(bool)
-    ]
+    col3.metric(
+        "Isolation Forest",
+        isolation_count
+    )
 
-    if not unusual_df.empty:
+    st.subheader("Anomaly Detection Graph")
 
-        st.warning(
-            "Some readings are above the statistical "
-            "power threshold. Review these readings."
-        )
+    fig, ax = plt.subplots(figsize=(12, 5))
+
+    ax.plot(
+        df["timestamp"],
+        df["Global_active_power"],
+        label="Electricity Power"
+    )
+
+    unusual = df[df["any_anomaly"]]
+
+    ax.scatter(
+        unusual["timestamp"],
+        unusual["Global_active_power"],
+        marker="x",
+        s=60,
+        label="Flagged Readings"
+    )
+
+    ax.set_xlabel("Timestamp")
+    ax.set_ylabel("Active Power (kW)")
+    ax.legend()
+    ax.set_title("Electricity Anomaly Detection")
+
+    plt.xticks(rotation=30)
+    plt.tight_layout()
+
+    st.pyplot(fig)
+    plt.close(fig)
+
+    st.subheader("Unusual Reading Details")
+
+    if not unusual.empty:
 
         st.dataframe(
-            unusual_df[
+            unusual[
                 [
                     "timestamp",
                     "Global_active_power",
@@ -279,74 +430,50 @@ if "statistical_anomaly" in filtered_df.columns:
     else:
 
         st.success(
-            "No readings exceeded the statistical threshold."
+            "No readings were flagged by the selected detection methods."
         )
 
-else:
-
     st.info(
-        "Run the anomaly detection program to view alerts."
+        "These are algorithmically flagged observations, "
+        "not confirmed appliance faults or energy wastage."
     )
 
 
-if "isolation_forest_anomaly" in filtered_df.columns:
+# ----------------------------------------
+# DATASET PAGE
+# ----------------------------------------
 
-    ml_count = int(
-        filtered_df["isolation_forest_anomaly"]
-        .astype(bool)
-        .sum()
+elif page == "Dataset":
+
+    st.header("Electricity Dataset")
+
+    st.write(
+        "Explore the cleaned household electricity readings."
     )
 
-    st.metric(
-        "Isolation Forest Unusual Readings",
-        ml_count
+    st.dataframe(
+        df,
+        use_container_width=True,
+        height=400
+    )
+
+    csv_data = df.to_csv(index=False).encode("utf-8")
+
+    st.download_button(
+        label="Download Dataset CSV",
+        data=csv_data,
+        file_name="smartpowertracker_results.csv",
+        mime="text/csv"
     )
 
 
-# -----------------------------------------
-# COMPLETE DATA TABLE
-# -----------------------------------------
-
-st.divider()
-
-st.subheader("Electricity Reading Details")
-
-st.dataframe(
-    filtered_df,
-    use_container_width=True,
-    hide_index=True
-)
-
-
-# -----------------------------------------
-# DOWNLOAD RESULTS
-# -----------------------------------------
-
-csv_data = filtered_df.to_csv(
-    index=False
-).encode("utf-8")
-
-st.download_button(
-    label="Download Filtered Electricity Data",
-    data=csv_data,
-    file_name="smart_power_readings.csv",
-    mime="text/csv"
-)
-
-
-# -----------------------------------------
+# ----------------------------------------
 # FOOTER
-# -----------------------------------------
+# ----------------------------------------
 
 st.divider()
 
 st.caption(
-    "SmartPowerTracker | Household Electricity "
-    "Monitoring and Anomaly Detection Project"
-)
-
-st.caption(
-    "Research dataset: UCI Individual Household "
-    "Electric Power Consumption. Unusual readings "
-    "are indicators for review, not proof of faults."
+    "SmartPowerTracker | Mini Project | "
+    "Python • Pandas • Matplotlib • Scikit-learn • Streamlit"
 )
