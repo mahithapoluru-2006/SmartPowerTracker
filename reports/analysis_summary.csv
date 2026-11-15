@@ -1,0 +1,10 @@
+Metric,Value
+Total readings,200.0
+Average power (kW),3.59198
+Median power (kW),3.377
+Minimum power (kW),2.188
+Maximum power (kW),7.706
+Average voltage (V),233.91385000000002
+First 40 average (kW),4.09875
+Last 40 average (kW),3.2891500000000002
+Readings below 4 kW,158.0
